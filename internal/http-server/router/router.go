@@ -29,10 +29,15 @@ type Buy interface {
 	PurchaseMerch(username, merchName string, quantity int) error
 }
 
+type Send interface {
+	SendCoins(senderUsername, receiverUsername string, amount int) error	
+}
+
 type Repository interface {
 	Auth
 	Info
 	Buy
+	Send
 }
 
 func New(log *slog.Logger, repo Repository) *chi.Mux {
@@ -48,7 +53,7 @@ func New(log *slog.Logger, repo Repository) *chi.Mux {
 		r.Use(mwAuth.New(log))
 
 		r.Get("/info", info.New(log, repo))
-		r.Post("/sendCoin", send.New(log))
+		r.Post("/sendCoin", send.New(log, repo))
 		r.Get("/buy/{item}", buy.New(log, repo))
 	})
 

@@ -227,3 +227,74 @@ func (r *Repository) PurchaseMerch(username, merchName string, quantity int) err
 
 	return nil
 }
+
+func (r *Repository) SendCoins(senderUsername, receiverUsername string, amount int) error {
+	const op = "repository.SendCoins"
+	ctx := context.Background()
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("%s: could not begin transaction: %w", op, err)
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	var senderID, senderBalance int
+	err = tx.QueryRowContext(ctx, `
+		SELECT id, balance 
+		FROM employees 
+		WHERE username = $1
+	`, senderUsername).Scan(&senderID, &senderBalance)
+	if err != nil {
+		return fmt.Errorf("%s: could not fetch sender data: %w", op, err)
+	}
+
+	if senderBalance < amount {
+		return fmt.Errorf("%s: insufficient balance", op)
+	}
+
+	var receiverID int
+	err = tx.QueryRowContext(ctx, `
+		SELECT id 
+		FROM employees 
+		WHERE username = $1
+	`, receiverUsername).Scan(&receiverID)
+	if err != nil {
+		return fmt.Errorf("%s: could not fetch receiver data: %w", op, err)
+	}
+
+	_, err = tx.ExecContext(ctx, `
+		UPDATE employees 
+		SET balance = balance - $1 
+		WHERE id = $2
+	`, amount, senderID)
+	if err != nil {
+		return fmt.Errorf("%s: could not update sender balance: %w", op, err)
+	}
+
+	_, err = tx.ExecContext(ctx, `
+		UPDATE employees 
+		SET balance = balance + $1 
+		WHERE id = $2
+	`, amount, receiverID)
+	if err != nil {
+		return fmt.Errorf("%s: could not update receiver balance: %w", op, err)
+	}
+
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO transactions (sender_id, receiver_id, amount) 
+		VALUES ($1, $2, $3)
+	`, senderID, receiverID, amount)
+	if err != nil {
+		return fmt.Errorf("%s: could not insert transaction record: %w", op, err)
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("%s: could not commit transaction: %w", op, err)
+	}
+
+	return nil
+}

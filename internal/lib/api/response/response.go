@@ -22,6 +22,10 @@ type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
+type MessageResponse struct {
+	Message interface{} `json:"message"`
+}
+
 func ValidationError(errs validator.ValidationErrors) ErrorResponse {
 	var errMsgs []string
 
