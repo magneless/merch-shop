@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/render"
 )
 
 func New(log *slog.Logger) http.HandlerFunc {
@@ -17,5 +18,6 @@ func New(log *slog.Logger) http.HandlerFunc {
 		)
 		_ = log
 
+		render.JSON(w, r, "All is OK")
 	}
 }
