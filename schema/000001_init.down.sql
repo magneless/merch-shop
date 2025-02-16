@@ -1,0 +1,4 @@
+DROP TABLE IF EXISTS purchases;
+DROP TABLE IF EXISTS transactions;
+DROP TABLE IF EXISTS employees;
+DROP TABLE IF EXISTS merch;
