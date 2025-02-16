@@ -25,9 +25,14 @@ type Info interface {
 	GetBalanceAndId(username string) (int, int, error)
 }
 
+type Buy interface {
+	PurchaseMerch(username, merchName string, quantity int) error
+}
+
 type Repository interface {
 	Auth
 	Info
+	Buy
 }
 
 func New(log *slog.Logger, repo Repository) *chi.Mux {
@@ -44,7 +49,7 @@ func New(log *slog.Logger, repo Repository) *chi.Mux {
 
 		r.Get("/info", info.New(log, repo))
 		r.Post("/sendCoin", send.New(log))
-		r.Get("/buy/{item}", buy.New(log))
+		r.Get("/buy/{item}", buy.New(log, repo))
 	})
 
 	return r

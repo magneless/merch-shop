@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 
@@ -153,4 +154,76 @@ func (r *Repository) GetInventory(userID int) ([]models.InventoryItem, error) {
 	}
 
 	return inventory, nil
+}
+
+func (r *Repository) PurchaseMerch(username, merchName string, quantity int) error {
+	const op = "repository.PurchaseMerch"
+	ctx := context.Background()
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("%s: could not begin transaction: %w", op, err)
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	var employeeID, balance int
+	err = tx.QueryRowContext(ctx, `
+		SELECT id, balance 
+		FROM employees 
+		WHERE username = $1
+	`, username).Scan(&employeeID, &balance)
+	if err != nil {
+		return fmt.Errorf("%s: could not fetch employee data: %w", op, err)
+	}
+
+	var price, merchID int
+	err = tx.QueryRowContext(ctx, `
+		SELECT id, price
+		FROM merch 
+		WHERE merch_name = $1
+	`, merchName).Scan(&merchID, &price)
+	if err != nil {
+		return fmt.Errorf("%s: could not fetch merch price and id: %w", op, err)
+	}
+
+	totalCost := price * quantity
+	if balance < totalCost {
+		return fmt.Errorf("%s: insufficient balance", op)
+	}
+
+	res, err := tx.ExecContext(ctx, `
+		UPDATE employees 
+		SET balance = balance - $1 
+		WHERE id = $2
+	`, totalCost, employeeID)
+	if err != nil {
+		return fmt.Errorf("%s: could not update employee balance: %w", op, err)
+	}
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("%s: could not get affected rows: %w", op, err)
+	}
+	if rowsAffected != 1 {
+		return fmt.Errorf("%s: no employee row updated", op)
+	}
+
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO purchases (employee_id, merch_id, count)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (employee_id, merch_id)
+		DO UPDATE SET count = purchases.count + EXCLUDED.count
+	`, employeeID, merchID, quantity)
+	if err != nil {
+		return fmt.Errorf("%s: could not update purchases: %w", op, err)
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("%s: could not commit transaction: %w", op, err)
+	}
+
+	return nil
 }
