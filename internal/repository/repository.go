@@ -3,6 +3,8 @@ package repository
 import (
 	"database/sql"
 	"fmt"
+
+	"github.com/magneless/merch-shop/internal/models"
 )
 
 type Repository struct {
@@ -40,4 +42,115 @@ func (r *Repository) GetUser(username, passwordHash string) error {
 	}
 
 	return nil
+}
+
+func (r *Repository) GetBalanceAndId(username string) (int, int, error) {
+	const op = "repository.GetBalanceAndId"
+	var userID, balance int
+
+	err := r.db.QueryRow("SELECT id, balance FROM employees WHERE username = $1", username).
+		Scan(&userID, &balance)
+	if err != nil {
+		return 0, 0, fmt.Errorf("%s: error fetching user info: %w", op, err)
+	}
+
+	return userID, balance, nil
+}
+
+func (r *Repository) GetSentTransactions(userID int, fromUsername string) ([]models.CoinTransaction, error) {
+	const op = "repository.GetSentTransactions"
+	rows, err := r.db.Query(`
+		SELECT t.amount, e.username
+		FROM transactions t
+		JOIN employees e ON t.receiver_id = e.id
+		WHERE t.sender_id = $1
+	`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("%s: error fetching sent transactions: %w", op, err)
+	}
+	defer rows.Close()
+
+	var transactions []models.CoinTransaction
+	for rows.Next() {
+		var amount int
+		var toUsername string
+		if err := rows.Scan(&amount, &toUsername); err != nil {
+			return nil, fmt.Errorf("%s: error scanning sent transaction: %w", op, err)
+		}
+		transactions = append(transactions, models.CoinTransaction{
+			FromUser: fromUsername,
+			ToUser:   toUsername,
+			Amount:   amount,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("%s: error iterating sent transactions: %w", op, err)
+	}
+
+	return transactions, nil
+}
+
+func (r *Repository) GetReceivedTransactions(userID int, toUsername string) ([]models.CoinTransaction, error) {
+	const op = "repository.GetReceivedTransactions"
+	rows, err := r.db.Query(`
+		SELECT t.amount, e.username
+		FROM transactions t
+		JOIN employees e ON t.sender_id = e.id
+		WHERE t.receiver_id = $1
+	`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("%s: error fetching received transactions: %w", op, err)
+	}
+	defer rows.Close()
+
+	var transactions []models.CoinTransaction
+	for rows.Next() {
+		var amount int
+		var fromUsername string
+		if err := rows.Scan(&amount, &fromUsername); err != nil {
+			return nil, fmt.Errorf("%s: error scanning received transaction: %w", op, err)
+		}
+		transactions = append(transactions, models.CoinTransaction{
+			FromUser: fromUsername,
+			ToUser:   toUsername,
+			Amount:   amount,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("%s: error iterating received transactions: %w", op, err)
+	}
+
+	return transactions, nil
+}
+
+func (r *Repository) GetInventory(userID int) ([]models.InventoryItem, error) {
+	const op = "repository.GetInventory"
+	rows, err := r.db.Query(`
+		SELECT m.merch_name, p.count
+		FROM purchases p
+		JOIN merch m ON p.merch_id = m.id
+		WHERE p.employee_id = $1
+	`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("%s: error fetching inventory: %w", op, err)
+	}
+	defer rows.Close()
+
+	var inventory []models.InventoryItem
+	for rows.Next() {
+		var merchName string
+		var count int
+		if err := rows.Scan(&merchName, &count); err != nil {
+			return nil, fmt.Errorf("%s: error scanning inventory item: %w", op, err)
+		}
+		inventory = append(inventory, models.InventoryItem{
+			Type:     merchName,
+			Quantity: count,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("%s: error iterating inventory items: %w", op, err)
+	}
+
+	return inventory, nil
 }

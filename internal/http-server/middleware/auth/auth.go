@@ -24,7 +24,7 @@ func New(log *slog.Logger) func(next http.Handler) http.Handler {
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
 				log.Error("authorization header is missed")
-				render.Status(r, http.StatusBadRequest)
+				render.Status(r, http.StatusUnauthorized)
 				render.JSON(w, r, response.ErrorResponse{Error: "authorization header is missed"})
 				return
 			}
@@ -32,7 +32,7 @@ func New(log *slog.Logger) func(next http.Handler) http.Handler {
 			parts := strings.Split(authHeader, " ")
 			if len(parts) != 2 || parts[0] != "Bearer" {
 				log.Error("invalid authorization header format")
-				render.Status(r, http.StatusBadRequest)
+				render.Status(r, http.StatusUnauthorized)
 				render.JSON(w, r, response.ErrorResponse{Error: "invalid authorization header format"})
 				return
 			}
@@ -42,7 +42,7 @@ func New(log *slog.Logger) func(next http.Handler) http.Handler {
 			username, err := jwt_token.ValidateAccessToken(tokenString)
 			if err != nil {
 				log.Error("error in token validation", sl.Err(err))
-				render.Status(r, http.StatusBadRequest)
+				render.Status(r, http.StatusUnauthorized)
 				render.JSON(w, r, response.ErrorResponse{Error: "invalid or expired access token"})
 				return
 			}

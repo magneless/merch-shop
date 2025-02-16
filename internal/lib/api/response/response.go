@@ -5,7 +5,14 @@ import (
 	"strings"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/magneless/merch-shop/internal/models"
 )
+
+type InfoResponse struct {
+	Coins       int             `json:"coins"`
+	Inventory   []models.InventoryItem `json:"inventory"`
+	CoinHistory models.CoinHistory     `json:"coinHistory"`
+}
 
 type AuthResponse struct {
 	Token string `json:"token"`
